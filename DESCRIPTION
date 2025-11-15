@@ -1,0 +1,17 @@
+Package: autodiffr
+Title: Automatic Differentiation for R
+Version: 0.0.0.9000
+Authors@R: 
+    person("Shlok", "Mishra", 
+           email = "shlokmishra08@tamu.edu", 
+           role = c("aut", "cre"))
+Description: Provides automatic differentiation capabilities for R, enabling 
+    efficient computation of gradients, Jacobians, and higher-order derivatives 
+    of mathematical functions. The package implements forward and reverse mode 
+    automatic differentiation algorithms to compute exact derivatives without 
+    numerical approximation, making it useful for optimization, machine learning, 
+    and scientific computing applications where gradient information is required.
+License: GPL (>= 3)
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
