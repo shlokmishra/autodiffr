@@ -1,5 +1,5 @@
 Package: autodiffr
-Title: Automatic Differentiation for R
+Title: A tidy, torch-powered toolkit for Auto-Diff M-Estimation and MLE in R
 Version: 0.0.0.9000
 Authors@R: 
     person("Shlok", "Mishra", 
@@ -15,3 +15,9 @@ License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
+Imports:
+    torch,
+    tibble
+Suggests:
+    broom,
+    ggplot2
