@@ -8,6 +8,7 @@
 #' @param gradient_norm Norm of the final gradient
 #' @param gradient Named numeric vector of final gradients
 #' @param optimizer Character string naming the optimizer used
+#' @param vcov Variance-covariance matrix (optional)
 #' @param call The original function call
 #'
 #' @return An object of class `autodiffr_fit`
@@ -21,6 +22,7 @@ new_autodiffr_fit <- function(coefficients = numeric(0),
                                gradient_norm = NA_real_,
                                gradient = numeric(0),
                                optimizer = character(0),
+                               vcov = NULL,
                                call = NULL) {
   structure(
     list(
@@ -32,6 +34,7 @@ new_autodiffr_fit <- function(coefficients = numeric(0),
       gradient_norm = gradient_norm,
       gradient = gradient,
       optimizer = optimizer,
+      vcov = vcov,
       call = call
     ),
     class = "autodiffr_fit"
@@ -48,6 +51,7 @@ new_autodiffr_fit <- function(coefficients = numeric(0),
 #' @param gradient_norm Norm of the final gradient
 #' @param gradient Named numeric vector of final gradients
 #' @param optimizer Character string naming the optimizer used
+#' @param vcov Variance-covariance matrix (optional)
 #' @param call The original function call
 #'
 #' @return An object of class `autodiffr_fit`
@@ -61,7 +65,8 @@ autodiffr_fit <- function(coefficients,
                           gradient_norm,
                           gradient,
                           optimizer,
-                          call) {
+                          vcov = NULL,
+                          call = NULL) {
   new_autodiffr_fit(
     coefficients = coefficients,
     loglik = loglik,
@@ -71,7 +76,9 @@ autodiffr_fit <- function(coefficients,
     gradient_norm = gradient_norm,
     gradient = gradient,
     optimizer = optimizer,
+    vcov = vcov,
     call = call
   )
 }
+
 
