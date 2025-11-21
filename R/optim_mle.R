@@ -1,20 +1,30 @@
 #' Maximum Likelihood Estimation using Automatic Differentiation
 #'
-#' Maximize a user-supplied log-likelihood function using optimization via the
-#' torch package. This function uses torch optimizers (LBFGS, Adam) for efficient
-#' optimization. Note: Currently, gradients are computed using finite differences
-#' since torch's autograd requires torch-native operations. Future versions will
-#' support torch-native functions for true automatic differentiation.
+#' Maximize a user-supplied log-likelihood function using automatic differentiation
+#' via the torch package. This function supports two modes:
 #'
-#' @param loglik A function that computes the log-likelihood. Must accept at least
-#'   two arguments: `theta` (a named numeric vector of parameters) and `data`
-#'   (the data object). Must return a scalar numeric value (the log-likelihood).
+#' \strong{Torch-native mode (recommended):} For true automatic differentiation,
+#' provide a `loglik` function that accepts torch tensors as the first argument
+#' and uses torch operations internally. This enables exact gradient computation
+#' via autograd.
+#'
+#' \strong{R function mode (fallback):} If you provide a standard R function that
+#' accepts numeric vectors, gradients will be computed using finite differences.
+#' This is less accurate and slower, but allows using existing R code.
+#'
+#' @param loglik A function that computes the log-likelihood. In torch-native mode,
+#'   it must accept torch tensors as the first argument and return a torch tensor.
+#'   In R function mode, it accepts a named numeric vector and returns a scalar.
+#'   Must accept at least two arguments: `theta` (parameters) and `data`.
 #' @param start A named numeric vector of starting values for the parameters.
 #' @param data The data object to be passed to `loglik`.
 #' @param optimizer Character string specifying the optimizer to use. Options:
 #'   `"lbfgs"` (default) or `"adam"`.
 #' @param max_iter Maximum number of iterations (default: 1000).
 #' @param tolerance Convergence tolerance (default: 1e-6).
+#' @param use_fallback Logical. If `TRUE`, force use of finite-difference gradients
+#'   even for torch-native functions. If `FALSE` (default), automatically detect
+#'   torch-native functions and use autograd when possible.
 #' @param ... Additional arguments passed to the optimizer.
 #'
 #' @return An object of class `autodiffr_fit` containing:
@@ -25,6 +35,7 @@
 #'   \item{iterations}{Number of iterations}
 #'   \item{gradient_norm}{Norm of the final gradient}
 #'   \item{gradient}{Named numeric vector of final gradients}
+#'   \item{vcov}{Variance-covariance matrix (inverse of negative Hessian)}
 #'   \item{optimizer}{Character string naming the optimizer used}
 #'   \item{call}{The original function call}
 #'
@@ -32,19 +43,33 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Example: MLE for normal distribution (mean and variance)
+#' # Example: MLE for normal distribution using torch-native function
+#' library(torch)
 #' set.seed(123)
 #' data <- rnorm(100, mean = 5, sd = 2)
+#' data_tensor <- torch_tensor(data, dtype = torch_float64())
 #'
-#' loglik <- function(theta, data) {
+#' # Torch-native loglikelihood (uses autograd)
+#' loglik_torch <- function(theta, data) {
+#'   mu <- theta[1]
+#'   sigma <- torch::torch_clamp(theta[2], min = 1e-6)  # Ensure positive
+#'   dist <- torch::distr_normal(mu, sigma)
+#'   dist$log_prob(data)$sum()
+#' }
+#'
+#' start <- c(mu = 0, sigma = 1)
+#' fit <- optim_mle(loglik_torch, start, data_tensor)
+#' print(fit)
+#'
+#' # R function mode (fallback, uses finite differences)
+#' loglik_r <- function(theta, data) {
 #'   mu <- theta["mu"]
 #'   sigma <- theta["sigma"]
 #'   sum(dnorm(data, mean = mu, sd = sigma, log = TRUE))
 #' }
 #'
-#' start <- c(mu = 0, sigma = 1)
-#' fit <- optim_mle(loglik, start, data)
-#' print(fit)
+#' fit2 <- optim_mle(loglik_r, start, data)
+#' print(fit2)
 #' }
 optim_mle <- function(loglik,
                        start,
@@ -52,6 +77,7 @@ optim_mle <- function(loglik,
                        optimizer = "lbfgs",
                        max_iter = 1000,
                        tolerance = 1e-6,
+                       use_fallback = FALSE,
                        ...) {
   # Store the call
   call <- match.call()
@@ -71,7 +97,6 @@ optim_mle <- function(loglik,
   n_params <- length(start)
 
   # Create torch tensors for parameters
-  # We'll use a list to track individual parameter tensors
   params_list <- lapply(seq_along(start), function(i) {
     torch::torch_tensor(
       start[i],
@@ -81,65 +106,98 @@ optim_mle <- function(loglik,
   })
   names(params_list) <- param_names
 
-  # Create a closure that wraps the user's loglik function
-  # Note: Since user function is R-based, we convert to R, call it, then convert back
-  # This breaks autograd, but we'll compute gradients manually using torch's autograd
-  # on a torch-native approximation or use finite differences
-  # For now, we'll use a manual gradient computation approach
-  compute_loss_and_grad <- function() {
-    # Convert torch tensors to R numeric vector
-    theta_r <- vapply(params_list, function(p) as.numeric(p$item()), numeric(1))
-    names(theta_r) <- param_names
+  # Create a single tensor for torch-native functions
+  params_tensor <- torch::torch_tensor(
+    as.numeric(start),
+    requires_grad = TRUE,
+    dtype = torch::torch_float64()
+  )
 
-    # Call user's loglik function
-    ll_value <- loglik(theta_r, data)
-
-    # Convert to torch tensor (negative because we'll minimize)
-    loss_tensor <- torch::torch_tensor(-ll_value, dtype = torch::torch_float64(),
-                                       requires_grad = TRUE)
-
-    # Compute gradients using finite differences (since R function breaks autograd)
-    # This is a temporary solution - future versions will support torch-native functions
-    eps <- 1e-5
-    grads <- numeric(length(params_list))
-    for (i in seq_along(params_list)) {
-      theta_plus <- theta_r
-      theta_plus[i] <- theta_plus[i] + eps
-      ll_plus <- loglik(theta_plus, data)
-      grads[i] <- (ll_plus - ll_value) / eps
-    }
-
-    # Store gradients in parameter tensors
-    for (i in seq_along(params_list)) {
-      if (!is.null(params_list[[i]]$grad)) {
-        params_list[[i]]$grad$zero_()
-      }
-      params_list[[i]]$grad <- torch::torch_tensor(-grads[i], dtype = torch::torch_float64())
-    }
-
-    return(loss_tensor)
+  # Detect if function is torch-native (unless forced to use fallback)
+  is_torch <- FALSE
+  if (!use_fallback) {
+    # Test with a small torch tensor
+    test_tensor <- torch::torch_tensor(c(0.0), requires_grad = TRUE, dtype = torch::torch_float64())
+    is_torch <- is_torch_native(loglik, test_tensor, data)
   }
 
-  # Set up optimizer - use Adam as it's more robust for manual gradients
-  # LBFGS requires exact gradients which we're approximating
+  if (is_torch) {
+    # Torch-native mode: use true autograd
+    compute_loss <- function() {
+      # Call user's torch-native function
+      ll_tensor <- loglik(params_tensor, data)
+      
+      # Ensure it's a scalar tensor
+      if (ll_tensor$numel() != 1) {
+        stop("loglik must return a scalar tensor")
+      }
+      
+      # Return negative (we minimize)
+      loss <- -ll_tensor
+      return(loss)
+    }
+  } else {
+    # R function mode: use finite differences
+    compute_loss <- function() {
+      # Convert torch tensors to R numeric vector
+      theta_r <- vapply(params_list, function(p) as.numeric(p$item()), numeric(1))
+      names(theta_r) <- param_names
+
+      # Call user's R function
+      ll_value <- loglik(theta_r, data)
+
+      # Convert to torch tensor (negative because we'll minimize)
+      loss_tensor <- torch::torch_tensor(-ll_value, dtype = torch::torch_float64(),
+                                         requires_grad = TRUE)
+
+      # Compute gradients using finite differences
+      eps <- 1e-5
+      grads <- finite_diff_grad(loglik, theta_r, data, eps)
+
+      # Store gradients in parameter tensors
+      for (i in seq_along(params_list)) {
+        if (!is.null(params_list[[i]]$grad)) {
+          params_list[[i]]$grad$zero_()
+        }
+        params_list[[i]]$grad <- torch::torch_tensor(-grads[i], dtype = torch::torch_float64())
+      }
+
+      return(loss_tensor)
+    }
+  }
+
+  # Set up optimizer
   if (optimizer == "lbfgs") {
-    # For LBFGS, we need to provide exact gradients
-    # Since we're using finite differences, we'll use a custom approach
-    opt <- torch::optim_lbfgs(
-      params_list,
-      lr = 1,
-      max_iter = max_iter,
-      tolerance_grad = tolerance,
-      tolerance_change = tolerance,
-      ...
-    )
+    if (is_torch) {
+      opt <- torch::optim_lbfgs(
+        params_tensor,
+        lr = 1,
+        max_iter = max_iter,
+        tolerance_grad = tolerance,
+        tolerance_change = tolerance,
+        ...
+      )
+    } else {
+      opt <- torch::optim_lbfgs(
+        params_list,
+        lr = 1,
+        max_iter = max_iter,
+        tolerance_grad = tolerance,
+        tolerance_change = tolerance,
+        ...
+      )
+    }
   } else if (optimizer == "adam") {
-    opt <- torch::optim_adam(params_list, lr = 0.01, ...)
+    if (is_torch) {
+      opt <- torch::optim_adam(params_tensor, lr = 0.01, ...)
+    } else {
+      opt <- torch::optim_adam(params_list, lr = 0.01, ...)
+    }
   } else {
     stop("Only 'lbfgs' and 'adam' optimizers are currently supported")
   }
 
-  # Track iteration count
+  # Track iteration count and convergence
   iter_count <- 0L
   converged <- FALSE
   conv_message <- ""
@@ -149,7 +207,13 @@ optim_mle <- function(loglik,
   closure_fn <- function() {
     iter_count <<- iter_count + 1L
     opt$zero_grad()
-    loss <- compute_loss_and_grad()
+    loss <- compute_loss()
+    
+    if (is_torch) {
+      # Use autograd for torch-native functions
+      loss$backward()
+    }
+    
     loss_value <- as.numeric(loss$item())
     
     # Check convergence
@@ -185,27 +249,105 @@ optim_mle <- function(loglik,
   })
 
   # Extract final values
-  final_params <- vapply(params_list, function(p) as.numeric(p$item()), numeric(1))
-  names(final_params) <- param_names
+  if (is_torch) {
+    final_params <- as.numeric(params_tensor$detach()$cpu())
+    names(final_params) <- param_names
+  } else {
+    final_params <- vapply(params_list, function(p) as.numeric(p$item()), numeric(1))
+    names(final_params) <- param_names
+  }
 
   # Compute final log-likelihood
-  theta_final <- final_params
-  final_ll <- loglik(theta_final, data)
-
-  # Extract gradients (recompute for final parameters)
-  eps <- 1e-5
-  final_grad <- numeric(length(params_list))
-  for (i in seq_along(params_list)) {
-    theta_plus <- theta_final
-    theta_plus[i] <- theta_plus[i] + eps
-    ll_plus <- loglik(theta_plus, data)
-    final_grad[i] <- (ll_plus - final_ll) / eps
+  if (is_torch) {
+    final_ll <- -as.numeric(compute_loss()$item())
+  } else {
+    final_ll <- loglik(final_params, data)
   }
-  names(final_grad) <- param_names
-  grad_norm <- sqrt(sum(final_grad^2))
+
+  # Extract gradients
+  if (is_torch) {
+    # Get gradients from autograd
+    final_grad <- as.numeric(params_tensor$grad$detach()$cpu())
+    if (!is.null(final_grad)) {
+      names(final_grad) <- param_names
+      grad_norm <- sqrt(sum(final_grad^2))
+    } else {
+      final_grad <- rep(NA_real_, n_params)
+      names(final_grad) <- param_names
+      grad_norm <- NA_real_
+    }
+  } else {
+    # Recompute gradients using finite differences
+    final_grad <- -finite_diff_grad(loglik, final_params, data)
+    names(final_grad) <- param_names
+    grad_norm <- sqrt(sum(final_grad^2))
+  }
+
+  # Compute Hessian and vcov (information matrix)
+  vcov_matrix <- NULL
+  if (is_torch) {
+    # For torch-native functions, compute Hessian using autograd
+    tryCatch({
+      # Re-enable gradients
+      params_tensor$requires_grad_(TRUE)
+      params_tensor$grad <- NULL
+      
+      # Compute log-likelihood
+      ll_tensor <- loglik(params_tensor, data)
+      
+      # Compute first derivatives
+      grad_list <- torch::autograd_grad(
+        outputs = ll_tensor,
+        inputs = params_tensor,
+        create_graph = TRUE
+      )[[1]]
+      
+      # Compute second derivatives (Hessian)
+      hessian_list <- list()
+      for (i in seq_len(n_params)) {
+        hess_row <- torch::autograd_grad(
+          outputs = grad_list[i],
+          inputs = params_tensor,
+          retain_graph = TRUE
+        )[[1]]
+        hessian_list[[i]] <- as.numeric(hess_row$detach()$cpu())
+      }
+      
+      hessian <- do.call(rbind, hessian_list)
+      # Information matrix is negative Hessian
+      info_matrix <- -hessian
+      
+      # Compute vcov (inverse of information matrix)
+      tryCatch({
+        vcov_matrix <- solve(info_matrix)
+        dimnames(vcov_matrix) <- list(param_names, param_names)
+      }, error = function(e) {
+        warning("Could not compute vcov: information matrix is singular")
+      })
+    }, error = function(e) {
+      warning("Could not compute Hessian using autograd: ", conditionMessage(e))
+    })
+  } else {
+    # For R functions, use finite differences for Hessian
+    tryCatch({
+      hessian <- finite_diff_hessian(loglik, final_params, data)
+      # Information matrix is negative Hessian
+      info_matrix <- -hessian
+      
+      # Compute vcov (inverse of information matrix)
+      tryCatch({
+        vcov_matrix <- solve(info_matrix)
+        dimnames(vcov_matrix) <- list(param_names, param_names)
+      }, error = function(e) {
+        warning("Could not compute vcov: information matrix is singular")
+      })
+    }, error = function(e) {
+      warning("Could not compute Hessian: ", conditionMessage(e))
+    })
+  }
 
   # Determine convergence code
-  convergence_code <- if (converged && grad_norm < tolerance) {
+  convergence_code <- if (converged && !is.na(grad_norm) && grad_norm < tolerance) {
     0L
   } else if (converged) {
     1L  # Converged but gradient not small enough
@@ -223,7 +365,7 @@ optim_mle <- function(loglik,
     gradient_norm = grad_norm,
     gradient = final_grad,
     optimizer = optimizer,
+    vcov = vcov_matrix,
     call = call
   )
 }
-
