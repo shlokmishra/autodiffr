@@ -67,3 +67,7 @@ src/*.dll
 
 # if on windows, also ignore:
 # Thumbs.db
+
+# Proposal files
+proposal.tex
+R_proposal.pdf
