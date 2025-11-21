@@ -20,4 +20,5 @@ Imports:
     tibble
 Suggests:
     broom,
-    ggplot2
+    ggplot2,
+    testthat (>= 3.0.0)
