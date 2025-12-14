@@ -207,15 +207,20 @@ augment.autodiffr_fit <- function(x, data = NULL, ...) {
           "Fitted values and residuals are set to NA. ",
           "Model-specific augment methods may be added in future versions.")
   
-  result <- tibble::tibble(
-    .fitted = rep(NA_real_, n_obs),
-    .resid = rep(NA_real_, n_obs)
-  )
-  
   # If data is provided, attach it to the result
   if (!is.null(data)) {
     data_tbl <- tibble::as_tibble(data)
-    result <- dplyr::bind_cols(data_tbl, result)
+    # Combine data with fitted/residual columns
+    result <- tibble::tibble(
+      data_tbl,
+      .fitted = rep(NA_real_, n_obs),
+      .resid = rep(NA_real_, n_obs)
+    )
+  } else {
+    result <- tibble::tibble(
+      .fitted = rep(NA_real_, n_obs),
+      .resid = rep(NA_real_, n_obs)
+    )
   }
   
   return(result)
