@@ -1,8 +1,8 @@
 #' Autoplot method for autodiffr_fit objects
 #'
-#' Creates diagnostic plots for autodiffr_fit objects. Currently provides
-#' a placeholder implementation, as optimization traces are not yet stored
-#' in fit objects.
+#' Creates diagnostic plots for fitted models. Right now just shows parameter
+#' estimates with confidence intervals. More plot types will be added later
+#' once we start storing optimization traces.
 #'
 #' @param object An object of class `autodiffr_fit`
 #' @param type Character string specifying the type of plot. Currently only
@@ -12,14 +12,9 @@
 #' @return A ggplot object (if ggplot2 is available) or NULL
 #'
 #' @details
-#' This function requires the `ggplot2` package, which is in Suggests.
-#' Future versions may include plots of:
-#' - Objective function value vs iteration
-#' - Gradient norm vs iteration
-#' - Parameter trace plots
-#'
-#' To enable these plots, optimization traces would need to be stored during
-#' the optimization process.
+#' Requires ggplot2 (in Suggests). Eventually we'll add plots for optimization
+#' traces (objective value, gradient norms, parameter paths) but that needs
+#' us to store that info during fitting first.
 #'
 #' @export
 #'

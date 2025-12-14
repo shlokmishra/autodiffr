@@ -1,9 +1,8 @@
-#' Gradient Verification: Compare Autograd vs Finite Differences
+#' Check gradients computed by autograd
 #'
-#' Compares gradients computed via automatic differentiation (autograd) with
-#' finite-difference approximations to verify the correctness of gradient computation.
-#' This is useful for debugging custom log-likelihood functions and ensuring
-#' that torch operations are properly differentiable.
+#' Compares autograd gradients with finite differences to make sure your
+#' log-likelihood function is implemented correctly. Useful for debugging
+#' when things aren't working as expected.
 #'
 #' @param loglik A torch-native function that computes the log-likelihood. Must
 #'   accept torch tensors as the first argument and return a scalar torch tensor.

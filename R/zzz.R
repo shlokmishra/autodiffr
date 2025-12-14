@@ -1,7 +1,6 @@
-# Package onLoad hook
+# Register autoplot method when package loads
 .onLoad <- function(libname, pkgname) {
-  # Register autoplot method for autodiffr_fit if ggplot2 is loaded
-  # We check if the generic exists (i.e., ggplot2 is attached)
+  # Try to register autoplot method if ggplot2 is available
   if (isNamespaceLoaded("ggplot2")) {
     tryCatch({
       if (exists("autoplot", envir = asNamespace("ggplot2"))) {
@@ -9,13 +8,13 @@
                          envir = asNamespace(pkgname))
       }
     }, error = function(e) {
-      # Silently fail if registration doesn't work
+      # Registration failed, that's okay
     })
   }
 }
 
-# Also register on attach if ggplot2 becomes available
 .onAttach <- function(libname, pkgname) {
+  # Same thing on attach, in case ggplot2 gets loaded later
   if (isNamespaceLoaded("ggplot2")) {
     tryCatch({
       if (exists("autoplot", envir = asNamespace("ggplot2"))) {
@@ -23,7 +22,7 @@
                          envir = asNamespace(pkgname))
       }
     }, error = function(e) {
-      # Silently fail if registration doesn't work
+      # Registration failed, that's okay
     })
   }
 }

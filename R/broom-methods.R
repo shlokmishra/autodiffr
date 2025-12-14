@@ -147,9 +147,9 @@ glance.autodiffr_fit <- function(x, ...) {
 #'   \item{.resid}{Residuals (currently NA)}
 #'
 #' @details
-#' This is a minimal implementation. For full functionality, model-specific
-#' augment methods would need to be implemented that know how to compute
-#' fitted values and residuals from the original data and model structure.
+#' This is pretty minimal right now. To do it properly, we'd need model-specific
+#' methods that know how to compute fitted values and residuals, which depends
+#' on what kind of model you're fitting.
 #'
 #' @export
 #'
