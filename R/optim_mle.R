@@ -25,6 +25,11 @@
 #' @param use_fallback Logical. If `TRUE`, force use of finite-difference gradients
 #'   even for torch-native functions. If `FALSE` (default), automatically detect
 #'   torch-native functions and use autograd when possible.
+#' @param constraints Optional constraint specification. Can be a single constraint
+#'   object (from `positive()`, `simplex()`, etc.) or a `constraints()` list.
+#'   When constraints are provided, parameters are transformed to unconstrained
+#'   space for optimization, and the log-likelihood is adjusted by the log-Jacobian
+#'   of the transformation. The final estimates are returned in the constrained space.
 #' @param ... Additional arguments passed to the optimizer.
 #'
 #' @return An object of class `autodiffr_fit` containing:
@@ -78,6 +83,7 @@ optim_mle <- function(loglik,
                        max_iter = 1000,
                        tolerance = 1e-6,
                        use_fallback = FALSE,
+                       constraints = NULL,
                        ...) {
   # Store the call
   call <- match.call()
@@ -85,6 +91,14 @@ optim_mle <- function(loglik,
   # Validate inputs
   validate_loglik(loglik)
   validate_start(start)
+  
+  # Validate constraints if provided
+  if (!is.null(constraints)) {
+    if (!inherits(constraints, "autodiffr_constraint") && 
+        !inherits(constraints, "autodiffr_constraints")) {
+      stop("constraints must be a constraint object or constraints() list")
+    }
+  }
 
   # Check torch availability
   if (!requireNamespace("torch", quietly = TRUE)) {
@@ -92,23 +106,30 @@ optim_mle <- function(loglik,
          "Install it with: install.packages('torch')")
   }
 
-  # Convert start to torch tensors
+  # Handle constraints: transform start from constrained to unconstrained space
   param_names <- names(start)
   n_params <- length(start)
+  
+  if (!is.null(constraints)) {
+    # Transform constrained start to unconstrained
+    start_unconstrained <- constraint_to_unconstrained(start, constraints, param_names)
+  } else {
+    start_unconstrained <- start
+  }
 
-  # Create torch tensors for parameters
-  params_list <- lapply(seq_along(start), function(i) {
+  # Create torch tensors for parameters (in unconstrained space)
+  params_list <- lapply(seq_along(start_unconstrained), function(i) {
     torch::torch_tensor(
-      start[i],
+      start_unconstrained[i],
       requires_grad = TRUE,
       dtype = torch::torch_float64()
     )
   })
   names(params_list) <- param_names
 
-  # Create a single tensor for torch-native functions
+  # Create a single tensor for torch-native functions (unconstrained)
   params_tensor <- torch::torch_tensor(
-    as.numeric(start),
+    as.numeric(start_unconstrained),
     requires_grad = TRUE,
     dtype = torch::torch_float64()
   )
@@ -128,35 +149,92 @@ optim_mle <- function(loglik,
   if (is_torch) {
     # Torch-native mode: use true autograd
     compute_loss <- function() {
-      # Call user's torch-native function
-      ll_tensor <- loglik(params_tensor, data)
+      # Transform unconstrained u to constrained theta
+      if (!is.null(constraints)) {
+        constraint_result <- apply_constraints(params_tensor, constraints, param_names)
+        theta_constrained <- constraint_result$theta
+        log_jacobian <- constraint_result$log_jacobian
+      } else {
+        theta_constrained <- params_tensor
+        log_jacobian <- torch::torch_tensor(0.0, dtype = torch::torch_float64())
+      }
+      
+      # Call user's torch-native function with constrained parameters
+      ll_tensor <- loglik(theta_constrained, data)
       
       # Ensure it's a scalar tensor
       if (ll_tensor$numel() != 1) {
         stop("loglik must return a scalar tensor")
       }
       
+      # Add log-Jacobian: loglik_u = loglik(theta) + log|J|
+      ll_adjusted <- ll_tensor + log_jacobian
+      
       # Return negative (we minimize)
-      loss <- -ll_tensor
+      loss <- -ll_adjusted
       return(loss)
     }
   } else {
     # R function mode: use finite differences
     compute_loss <- function() {
-      # Convert torch tensors to R numeric vector
-      theta_r <- vapply(params_list, function(p) as.numeric(p$item()), numeric(1))
-      names(theta_r) <- param_names
+      # Convert torch tensors to R numeric vector (unconstrained)
+      u_r <- vapply(params_list, function(p) as.numeric(p$item()), numeric(1))
+      names(u_r) <- param_names
 
-      # Call user's R function
+      # Transform to constrained space
+      if (!is.null(constraints)) {
+        constraint_result <- apply_constraints_r(u_r, constraints, param_names)
+        theta_r <- constraint_result$theta
+        log_jacobian <- constraint_result$log_jacobian
+      } else {
+        theta_r <- u_r
+        log_jacobian <- 0.0
+      }
+
+      # Call user's R function with constrained parameters
       ll_value <- loglik(theta_r, data)
+      
+      # Add log-Jacobian
+      ll_adjusted <- ll_value + log_jacobian
 
       # Convert to torch tensor (negative because we'll minimize)
-      loss_tensor <- torch::torch_tensor(-ll_value, dtype = torch::torch_float64(),
+      loss_tensor <- torch::torch_tensor(-ll_adjusted, dtype = torch::torch_float64(),
                                          requires_grad = TRUE)
 
       # Compute gradients using finite differences
+      # We need to compute gradient w.r.t. unconstrained u
+      # dL/du = dL/dtheta * dtheta/du = dL/dtheta * J
+      # For now, compute dL/dtheta and approximate dtheta/du
       eps <- 1e-5
-      grads <- finite_diff_grad(loglik, theta_r, data, eps)
+      grads_theta <- finite_diff_grad(function(theta, data) {
+        if (!is.null(constraints)) {
+          # Transform theta to get u, then back to theta (to ensure consistency)
+          # Actually, we need to compute gradient w.r.t. u
+          # Let's compute it numerically
+          u_test <- constraint_to_unconstrained(theta, constraints, param_names)
+          result <- apply_constraints_r(u_test, constraints, param_names)
+          loglik(result$theta, data) + result$log_jacobian
+        } else {
+          loglik(theta, data)
+        }
+      }, theta_r, data, eps)
+      
+      # For constraints, we need to transform gradients from theta to u
+      # For positive: dL/du = dL/dtheta * exp(u) = dL/dtheta * theta
+      # For simplex: more complex, approximate numerically
+      if (!is.null(constraints)) {
+        grads_u <- numeric(length(u_r))
+        for (i in seq_along(u_r)) {
+          u_plus <- u_r
+          u_plus[i] <- u_plus[i] + eps
+          result_plus <- apply_constraints_r(u_plus, constraints, param_names)
+          ll_plus <- loglik(result_plus$theta, data) + result_plus$log_jacobian
+          grads_u[i] <- (ll_plus - ll_adjusted) / eps
+        }
+        grads <- grads_u
+      } else {
+        grads <- grads_theta
+      }
 
       # Store gradients in parameter tensors
       for (i in seq_along(params_list)) {
@@ -252,64 +330,111 @@ optim_mle <- function(loglik,
     conv_message <<- paste("Optimization error:", conditionMessage(e))
   })
 
-  # Extract final values
+  # Extract final values (in unconstrained space)
   if (is_torch) {
-    final_params <- as.numeric(params_tensor$detach()$cpu())
-    names(final_params) <- param_names
+    final_params_u <- as.numeric(params_tensor$detach()$cpu())
+    names(final_params_u) <- param_names
   } else {
-    final_params <- vapply(params_list, function(p) as.numeric(p$item()), numeric(1))
-    names(final_params) <- param_names
+    final_params_u <- vapply(params_list, function(p) as.numeric(p$item()), numeric(1))
+    names(final_params_u) <- param_names
+  }
+  
+  # Transform back to constrained space for final results
+  if (!is.null(constraints)) {
+    if (is_torch) {
+      # Convert to torch tensor, apply constraints, convert back
+      u_tensor <- torch::torch_tensor(as.numeric(final_params_u), dtype = torch::torch_float64())
+      constraint_result <- apply_constraints(u_tensor, constraints, param_names)
+      final_params <- as.numeric(constraint_result$theta$detach()$cpu())
+      names(final_params) <- param_names
+    } else {
+      constraint_result <- apply_constraints_r(final_params_u, constraints, param_names)
+      final_params <- constraint_result$theta
+      names(final_params) <- param_names
+    }
+  } else {
+    final_params <- final_params_u
   }
 
-  # Compute final log-likelihood
+  # Compute final log-likelihood (with constraints if applicable)
   if (is_torch) {
     final_ll <- -as.numeric(compute_loss()$item())
   } else {
-    final_ll <- loglik(final_params, data)
+    if (!is.null(constraints)) {
+      constraint_result <- apply_constraints_r(final_params_u, constraints, param_names)
+      final_ll <- loglik(constraint_result$theta, data) + constraint_result$log_jacobian
+    } else {
+      final_ll <- loglik(final_params, data)
+    }
   }
 
-  # Extract gradients
+  # Extract gradients (in unconstrained space)
+  # Note: Gradients are in unconstrained space since that's what the optimizer uses
   if (is_torch) {
-    # Get gradients from autograd
+    # Get gradients from autograd (these are w.r.t. unconstrained u)
     if (!is.null(params_tensor$grad)) {
-      final_grad <- as.numeric(params_tensor$grad$detach()$cpu())
-      names(final_grad) <- param_names
-      grad_norm <- sqrt(sum(final_grad^2))
+      final_grad_u <- as.numeric(params_tensor$grad$detach()$cpu())
+      names(final_grad_u) <- param_names
+      grad_norm <- sqrt(sum(final_grad_u^2))
     } else {
       # Try to recompute gradients
       tryCatch({
         params_tensor$requires_grad_(TRUE)
         params_tensor$grad <- NULL
-        ll_tensor <- do.call(loglik, c(list(params_tensor, data), dots))
-        ll_tensor$backward()
-        final_grad <- as.numeric(params_tensor$grad$detach()$cpu())
-        names(final_grad) <- param_names
-        grad_norm <- sqrt(sum(final_grad^2))
+        loss <- compute_loss()
+        loss$backward()
+        final_grad_u <- as.numeric(params_tensor$grad$detach()$cpu())
+        names(final_grad_u) <- param_names
+        grad_norm <- sqrt(sum(final_grad_u^2))
       }, error = function(e) {
-        final_grad <<- rep(NA_real_, n_params)
-        names(final_grad) <<- param_names
+        final_grad_u <<- rep(NA_real_, n_params)
+        names(final_grad_u) <<- param_names
         grad_norm <<- NA_real_
       })
     }
+    # For reporting, use unconstrained gradients
+    final_grad <- final_grad_u
   } else {
-    # Recompute gradients using finite differences
-    # For R functions, data is already R format, so we can use it directly
-    final_grad <- -finite_diff_grad(loglik, final_params, data)
+    # Recompute gradients using finite differences (w.r.t. unconstrained u)
+    if (!is.null(constraints)) {
+      # Compute gradient w.r.t. unconstrained parameters
+      eps <- 1e-5
+      grads_u <- numeric(length(final_params_u))
+      for (i in seq_along(final_params_u)) {
+        u_plus <- final_params_u
+        u_plus[i] <- u_plus[i] + eps
+        result_plus <- apply_constraints_r(u_plus, constraints, param_names)
+        ll_plus <- loglik(result_plus$theta, data) + result_plus$log_jacobian
+        grads_u[i] <- (ll_plus - final_ll) / eps
+      }
+      final_grad <- -grads_u
+    } else {
+      final_grad <- -finite_diff_grad(loglik, final_params, data)
+    }
     names(final_grad) <- param_names
     grad_norm <- sqrt(sum(final_grad^2))
   }
 
   # Compute Hessian and vcov (information matrix)
+  # Note: When constraints are present, vcov is computed in unconstrained space
   vcov_matrix <- NULL
   if (is_torch) {
     # For torch-native functions, compute Hessian using autograd
+    # Compute Hessian of the adjusted log-likelihood (including log-Jacobian)
     tryCatch({
       # Re-enable gradients
       params_tensor$requires_grad_(TRUE)
       params_tensor$grad <- NULL
       
-      # Compute log-likelihood
-      ll_tensor <- loglik(params_tensor, data)
+      # Compute adjusted log-likelihood (with constraints if applicable)
+      if (!is.null(constraints)) {
+        constraint_result <- apply_constraints(params_tensor, constraints, param_names)
+        theta_constrained <- constraint_result$theta
+        log_jacobian <- constraint_result$log_jacobian
+        ll_tensor <- loglik(theta_constrained, data) + log_jacobian
+      } else {
+        ll_tensor <- loglik(params_tensor, data)
+      }
       
       # Compute first derivatives
       grad_list <- torch::autograd_grad(
@@ -346,7 +471,18 @@ optim_mle <- function(loglik,
   } else {
     # For R functions, use finite differences for Hessian
     tryCatch({
-      hessian <- finite_diff_hessian(loglik, final_params, data)
+      # Compute Hessian of adjusted log-likelihood
+      if (!is.null(constraints)) {
+        # Compute Hessian w.r.t. unconstrained parameters
+        # Use a wrapper function that includes constraints
+        loglik_adjusted <- function(u, data) {
+          result <- apply_constraints_r(u, constraints, param_names)
+          loglik(result$theta, data) + result$log_jacobian
+        }
+        hessian <- finite_diff_hessian(loglik_adjusted, final_params_u, data)
+      } else {
+        hessian <- finite_diff_hessian(loglik, final_params, data)
+      }
       # Information matrix is negative Hessian
       info_matrix <- -hessian
       

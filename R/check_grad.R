@@ -69,7 +69,6 @@ check_grad <- function(loglik,
   }
 
   param_names <- names(theta0)
-  n_params <- length(theta0)
 
   # Convert theta0 to torch tensor with gradient tracking
   theta_t <- torch::torch_tensor(

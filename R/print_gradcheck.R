@@ -18,7 +18,7 @@ print.autodiffr_gradcheck <- function(x, ...) {
   if (!x$ok) {
     cat("Parameters with largest relative errors:\n")
     # Sort by relative error and show worst offenders
-    worst_idx <- order(x$rel_err, decreasing = TRUE)[1:min(5, length(x$rel_err))]
+    worst_idx <- order(x$rel_err, decreasing = TRUE)[seq_len(min(5, length(x$rel_err)))]
     for (i in worst_idx) {
       param_name <- names(x$rel_err)[i]
       cat(sprintf("  %s: rel_err = %.2e, abs_err = %.2e\n",
