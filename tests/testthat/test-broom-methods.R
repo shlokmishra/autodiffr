@@ -41,7 +41,8 @@ test_that("tidy.autodiffr_fit works", {
   expect_true(all(is.na(result$std.error) | is.finite(result$std.error)))
   expect_true(all(is.na(result$statistic) | is.finite(result$statistic)))
   expect_true(all(is.na(result$p.value) | is.finite(result$p.value)))
-  expect_true(all(result$p.value >= 0 & result$p.value <= 1))
+  # p.value may be NA if std.error is NaN
+  expect_true(all(is.na(result$p.value) | (result$p.value >= 0 & result$p.value <= 1)))
 })
 
 test_that("tidy.autodiffr_fit handles missing vcov", {

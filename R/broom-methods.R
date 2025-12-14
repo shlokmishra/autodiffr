@@ -210,12 +210,12 @@ augment.autodiffr_fit <- function(x, data = NULL, ...) {
   # If data is provided, attach it to the result
   if (!is.null(data)) {
     data_tbl <- tibble::as_tibble(data)
-    # Combine data with fitted/residual columns
-    result <- tibble::tibble(
-      data_tbl,
-      .fitted = rep(NA_real_, n_obs),
-      .resid = rep(NA_real_, n_obs)
-    )
+    # Combine data columns with fitted/residual columns
+    # Create a list with all columns
+    result_list <- as.list(data_tbl)
+    result_list$.fitted <- rep(NA_real_, n_obs)
+    result_list$.resid <- rep(NA_real_, n_obs)
+    result <- do.call(tibble::tibble, result_list)
   } else {
     result <- tibble::tibble(
       .fitted = rep(NA_real_, n_obs),
