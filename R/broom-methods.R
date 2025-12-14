@@ -212,9 +212,10 @@ augment.autodiffr_fit <- function(x, data = NULL, ...) {
     .resid = rep(NA_real_, n_obs)
   )
   
-  # If data is a data.frame, try to attach it
-  if (is.data.frame(data)) {
-    result <- cbind(data, result)
+  # If data is provided, attach it to the result
+  if (!is.null(data)) {
+    data_tbl <- tibble::as_tibble(data)
+    result <- dplyr::bind_cols(data_tbl, result)
   }
   
   return(result)
