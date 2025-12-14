@@ -24,7 +24,37 @@ install.packages("torch")
 torch::install_torch()  # Install PyTorch backend
 ```
 
-## Remaining Work
+## Features
 
-For the remainder of the semester, the following features are planned: implement `optim_mest()` for M-estimation with sandwich variance, add `vcov_info()` for information matrix diagnostics, create `profile_lik()` for profile likelihood confidence intervals with `autoplot()` visualization, develop `constraints()` helpers for smooth constraint handling (positive, simplex, correlation matrices), add `check_grad()` for gradient verification, implement `broom` methods (`tidy()`, `glance()`, `augment()`) for tidy output, create package vignettes with examples, and expand test coverage.
+- **Maximum Likelihood Estimation**: `optim_mle()` with automatic differentiation via torch
+- **M-Estimation**: `optim_mest()` with sandwich variance-covariance matrices
+- **Parameter Constraints**: `positive()`, `simplex()`, `corr_matrix()` for smooth constraint handling
+- **Gradient Verification**: `check_grad()` to verify autograd gradients
+- **Variance Diagnostics**: `vcov_info()` for information matrix diagnostics
+- **Broom Integration**: `tidy()`, `glance()`, and `augment()` methods for tidy output
+- **Visualization**: `autoplot()` for diagnostic plots
+- **Comprehensive Vignettes**: Three detailed vignettes with examples
+
+## Quick Start
+
+```r
+library(torch)
+library(autodiffr)
+
+# Example: Normal distribution MLE
+data <- rnorm(100, mean = 5, sd = 2)
+data_tensor <- torch_tensor(data, dtype = torch_float64())
+
+loglik <- function(theta, data) {
+  mu <- theta[1]
+  sigma <- torch_clamp(theta[2], min = 1e-6)
+  dist <- distr_normal(mu, sigma)
+  dist$log_prob(data)$sum()
+}
+
+fit <- optim_mle(loglik, start = c(mu = 0, sigma = 1), data = data_tensor)
+print(fit)
+```
+
+See the vignettes for more detailed examples.
 

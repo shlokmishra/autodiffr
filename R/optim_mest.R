@@ -536,14 +536,28 @@ optim_mest <- function(psi,
         
         psi_mat_grad <- do.call(psi, c(list(theta_final_torch, data), dots))
         # Extract j-th column and compute mean
-        # Use proper tensor indexing: psi_mat_grad is n x p, we want column j
-        if (length(psi_mat_grad$shape) == 2) {
-          # 2D tensor: extract column j (1-based indexing)
-          psi_col_j <- psi_mat_grad[, j]
-          psi_mean_j <- torch::torch_mean(psi_col_j)
+        # Handle both torch tensors and R matrices
+        if (inherits(psi_mat_grad, "torch_tensor")) {
+          if (length(psi_mat_grad$shape) == 2) {
+            # 2D tensor: extract column j (1-based indexing)
+            tryCatch({
+              psi_col_j <- psi_mat_grad[, j]
+              psi_mean_j <- torch::torch_mean(psi_col_j)
+            }, error = function(e) {
+              # Fallback: convert to R and compute
+              psi_mat_grad_r <- as.matrix(psi_mat_grad$detach()$cpu())
+              psi_mean_j <<- torch::torch_tensor(mean(psi_mat_grad_r[, j]), 
+                                                dtype = torch::torch_float64())
+            })
+          } else {
+            # Not 2D, convert to R
+            psi_mat_grad_r <- as.matrix(psi_mat_grad$detach()$cpu())
+            psi_mean_j <- torch::torch_tensor(mean(psi_mat_grad_r[, j]), 
+                                              dtype = torch::torch_float64())
+          }
         } else {
-          # Fallback: convert to R and back
-          psi_mat_grad_r <- as.matrix(psi_mat_grad$detach()$cpu())
+          # R matrix, convert to torch
+          psi_mat_grad_r <- as.matrix(psi_mat_grad)
           psi_mean_j <- torch::torch_tensor(mean(psi_mat_grad_r[, j]), 
                                             dtype = torch::torch_float64())
         }

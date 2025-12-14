@@ -173,7 +173,8 @@ test_that("autoplot.autodiffr_fit works", {
   fit <- optim_mle(loglik_r, start, data_r, max_iter = 50)
   
   # Test autoplot - need to call the method directly or use autodiffr::autoplot
-  p <- autoplot.autodiffr_fit(fit)
+  # Suppress any warnings from autoplot
+  p <- suppressWarnings(autoplot.autodiffr_fit(fit))
   
   expect_s3_class(p, "ggplot")
 })
