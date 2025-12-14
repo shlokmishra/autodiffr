@@ -98,7 +98,7 @@ test_that("vcov() method works", {
   start <- c(mu = 0, sigma = 1)
   fit <- optim_mle(loglik_r, start, data, optimizer = "adam", max_iter = 50)
   
-  vcov_result <- vcov(fit)
+  vcov_result <- vcov.autodiffr_fit(fit)
   # vcov may be NULL, but if present should match fit$vcov
   if (!is.null(vcov_result)) {
     expect_equal(vcov_result, fit$vcov)

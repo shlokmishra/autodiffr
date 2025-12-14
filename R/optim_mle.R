@@ -267,17 +267,29 @@ optim_mle <- function(loglik,
   # Extract gradients
   if (is_torch) {
     # Get gradients from autograd
-    final_grad <- as.numeric(params_tensor$grad$detach()$cpu())
-    if (!is.null(final_grad)) {
+    if (!is.null(params_tensor$grad)) {
+      final_grad <- as.numeric(params_tensor$grad$detach()$cpu())
       names(final_grad) <- param_names
       grad_norm <- sqrt(sum(final_grad^2))
     } else {
-      final_grad <- rep(NA_real_, n_params)
-      names(final_grad) <- param_names
-      grad_norm <- NA_real_
+      # Try to recompute gradients
+      tryCatch({
+        params_tensor$requires_grad_(TRUE)
+        params_tensor$grad <- NULL
+        ll_tensor <- do.call(loglik, c(list(params_tensor, data), dots))
+        ll_tensor$backward()
+        final_grad <- as.numeric(params_tensor$grad$detach()$cpu())
+        names(final_grad) <- param_names
+        grad_norm <- sqrt(sum(final_grad^2))
+      }, error = function(e) {
+        final_grad <<- rep(NA_real_, n_params)
+        names(final_grad) <<- param_names
+        grad_norm <<- NA_real_
+      })
     }
   } else {
     # Recompute gradients using finite differences
+    # For R functions, data is already R format, so we can use it directly
     final_grad <- -finite_diff_grad(loglik, final_params, data)
     names(final_grad) <- param_names
     grad_norm <- sqrt(sum(final_grad^2))

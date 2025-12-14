@@ -10,3 +10,4 @@ vcov.autodiffr_fit <- function(object, ...) {
   object$vcov
 }
 
+
