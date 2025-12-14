@@ -1,19 +1,3 @@
-#' Create an autodiffr fit object
-#'
-#' @param coefficients Named numeric vector of parameter estimates
-#' @param loglik Final log-likelihood value
-#' @param convergence Convergence code (0 = success)
-#' @param message Convergence message
-#' @param iterations Number of iterations
-#' @param gradient_norm Norm of the final gradient
-#' @param gradient Named numeric vector of final gradients
-#' @param optimizer Character string naming the optimizer used
-#' @param vcov Variance-covariance matrix (optional)
-#' @param call The original function call
-#'
-#' @return An object of class `autodiffr_fit`
-#'
-#' @keywords internal
 new_autodiffr_fit <- function(coefficients = numeric(0),
                                loglik = NA_real_,
                                convergence = NA_integer_,
@@ -41,22 +25,6 @@ new_autodiffr_fit <- function(coefficients = numeric(0),
   )
 }
 
-#' Constructor for autodiffr fit objects
-#'
-#' @param coefficients Named numeric vector of parameter estimates
-#' @param loglik Final log-likelihood value
-#' @param convergence Convergence code (0 = success)
-#' @param message Convergence message
-#' @param iterations Number of iterations
-#' @param gradient_norm Norm of the final gradient
-#' @param gradient Named numeric vector of final gradients
-#' @param optimizer Character string naming the optimizer used
-#' @param vcov Variance-covariance matrix (optional)
-#' @param call The original function call
-#'
-#' @return An object of class `autodiffr_fit`
-#'
-#' @keywords internal
 autodiffr_fit <- function(coefficients,
                           loglik,
                           convergence,
