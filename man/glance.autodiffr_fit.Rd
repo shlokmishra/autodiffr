@@ -4,7 +4,7 @@
 \alias{glance.autodiffr_fit}
 \title{Glance method for autodiffr_fit objects}
 \usage{
-glance.autodiffr_fit(x, ...)
+\method{glance}{autodiffr_fit}(x, ...)
 }
 \arguments{
 \item{x}{An object of class \code{autodiffr_fit}}

@@ -18,21 +18,14 @@ autoplot.autodiffr_fit(object, type = c("summary"), ...)
 A ggplot object (if ggplot2 is available) or NULL
 }
 \description{
-Creates diagnostic plots for autodiffr_fit objects. Currently provides
-a placeholder implementation, as optimization traces are not yet stored
-in fit objects.
+Creates diagnostic plots for fitted models. Right now just shows parameter
+estimates with confidence intervals. More plot types will be added later
+once we start storing optimization traces.
 }
 \details{
-This function requires the \code{ggplot2} package, which is in Suggests.
-Future versions may include plots of:
-\itemize{
-\item Objective function value vs iteration
-\item Gradient norm vs iteration
-\item Parameter trace plots
-}
-
-To enable these plots, optimization traces would need to be stored during
-the optimization process.
+Requires ggplot2 (in Suggests). Eventually we'll add plots for optimization
+traces (objective value, gradient norms, parameter paths) but that needs
+us to store that info during fitting first.
 }
 \examples{
 \dontrun{

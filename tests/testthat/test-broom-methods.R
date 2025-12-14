@@ -3,6 +3,18 @@ test_that("tidy.autodiffr_fit works", {
   skip_if_not_installed("broom")
   skip_if_not_installed("tibble")
   
+  # Register broom methods - needed because broom is in Suggests
+  library(broom)
+  if (requireNamespace("generics", quietly = TRUE)) {
+    # Get methods from autodiffr namespace
+    tidy_method <- get("tidy.autodiffr_fit", envir = asNamespace("autodiffr"))
+    glance_method <- get("glance.autodiffr_fit", envir = asNamespace("autodiffr"))
+    augment_method <- get("augment.autodiffr_fit", envir = asNamespace("autodiffr"))
+    registerS3method("tidy", "autodiffr_fit", tidy_method)
+    registerS3method("glance", "autodiffr_fit", glance_method)
+    registerS3method("augment", "autodiffr_fit", augment_method)
+  }
+  
   set.seed(123)
   data_r <- rnorm(100, mean = 5, sd = 2)
   
@@ -62,6 +74,14 @@ test_that("glance.autodiffr_fit works", {
   skip_if_not_installed("broom")
   skip_if_not_installed("tibble")
   
+  # Register broom methods
+  library(broom)
+  if (requireNamespace("generics", quietly = TRUE)) {
+    registerS3method("tidy", "autodiffr_fit", autodiffr::tidy.autodiffr_fit)
+    registerS3method("glance", "autodiffr_fit", autodiffr::glance.autodiffr_fit)
+    registerS3method("augment", "autodiffr_fit", autodiffr::augment.autodiffr_fit)
+  }
+  
   set.seed(123)
   data_r <- rnorm(100, mean = 5, sd = 2)
   
@@ -95,6 +115,14 @@ test_that("glance.autodiffr_fit works for mest", {
   skip_if_not_installed("broom")
   skip_if_not_installed("tibble")
   
+  # Register broom methods
+  library(broom)
+  if (requireNamespace("generics", quietly = TRUE)) {
+    registerS3method("tidy", "autodiffr_fit", autodiffr::tidy.autodiffr_fit)
+    registerS3method("glance", "autodiffr_fit", autodiffr::glance.autodiffr_fit)
+    registerS3method("augment", "autodiffr_fit", autodiffr::augment.autodiffr_fit)
+  }
+  
   set.seed(123)
   n <- 50
   X <- cbind(1, rnorm(n))
@@ -123,6 +151,14 @@ test_that("augment.autodiffr_fit works", {
   skip_if_not_installed("torch")
   skip_if_not_installed("broom")
   skip_if_not_installed("tibble")
+  
+  # Register broom methods
+  library(broom)
+  if (requireNamespace("generics", quietly = TRUE)) {
+    registerS3method("tidy", "autodiffr_fit", autodiffr::tidy.autodiffr_fit)
+    registerS3method("glance", "autodiffr_fit", autodiffr::glance.autodiffr_fit)
+    registerS3method("augment", "autodiffr_fit", autodiffr::augment.autodiffr_fit)
+  }
   
   set.seed(123)
   data_r <- rnorm(100, mean = 5, sd = 2)

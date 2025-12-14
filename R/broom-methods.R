@@ -18,6 +18,7 @@
 #' is in Suggests, so it may not be installed. This method will work even if
 #' `broom` is not attached, as it uses S3 method dispatch.
 #'
+#' @method tidy autodiffr_fit
 #' @export
 #'
 #' @examples
@@ -88,6 +89,7 @@ tidy.autodiffr_fit <- function(x, ...) {
 #' computed from the log-likelihood and number of parameters. The number of
 #' observations (nobs) is not currently stored in fit objects and will be NA.
 #'
+#' @method glance autodiffr_fit
 #' @export
 #'
 #' @examples
@@ -151,6 +153,7 @@ glance.autodiffr_fit <- function(x, ...) {
 #' methods that know how to compute fitted values and residuals, which depends
 #' on what kind of model you're fitting.
 #'
+#' @method augment autodiffr_fit
 #' @export
 #'
 #' @examples

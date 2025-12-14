@@ -2,7 +2,7 @@
 % Please edit documentation in R/check_grad.R
 \name{check_grad}
 \alias{check_grad}
-\title{Gradient Verification: Compare Autograd vs Finite Differences}
+\title{Check gradients computed by autograd}
 \usage{
 check_grad(loglik, theta0, data, ..., eps = 1e-06, rel_tol = 0.001)
 }
@@ -33,10 +33,9 @@ An object of class \code{autodiffr_gradcheck} containing:
 \item{ok}{Logical indicating if all relative errors are within tolerance}
 }
 \description{
-Compares gradients computed via automatic differentiation (autograd) with
-finite-difference approximations to verify the correctness of gradient computation.
-This is useful for debugging custom log-likelihood functions and ensuring
-that torch operations are properly differentiable.
+Compares autograd gradients with finite differences to make sure your
+log-likelihood function is implemented correctly. Useful for debugging
+when things aren't working as expected.
 }
 \examples{
 \dontrun{

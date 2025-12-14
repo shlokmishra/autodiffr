@@ -4,7 +4,7 @@
 \alias{tidy.autodiffr_fit}
 \title{Tidy method for autodiffr_fit objects}
 \usage{
-tidy.autodiffr_fit(x, ...)
+\method{tidy}{autodiffr_fit}(x, ...)
 }
 \arguments{
 \item{x}{An object of class \code{autodiffr_fit}}

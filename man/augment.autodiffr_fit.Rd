@@ -4,7 +4,7 @@
 \alias{augment.autodiffr_fit}
 \title{Augment method for autodiffr_fit objects}
 \usage{
-augment.autodiffr_fit(x, data = NULL, ...)
+\method{augment}{autodiffr_fit}(x, data = NULL, ...)
 }
 \arguments{
 \item{x}{An object of class \code{autodiffr_fit}}
@@ -24,9 +24,9 @@ residuals. This is a minimal implementation that returns NA for fitted values
 and residuals, as these require model-specific knowledge.
 }
 \details{
-This is a minimal implementation. For full functionality, model-specific
-augment methods would need to be implemented that know how to compute
-fitted values and residuals from the original data and model structure.
+This is pretty minimal right now. To do it properly, we'd need model-specific
+methods that know how to compute fitted values and residuals, which depends
+on what kind of model you're fitting.
 }
 \examples{
 \dontrun{
