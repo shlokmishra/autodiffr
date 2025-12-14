@@ -116,8 +116,12 @@ optim_mle <- function(loglik,
   # Detect if function is torch-native (unless forced to use fallback)
   is_torch <- FALSE
   if (!use_fallback) {
-    # Test with a small torch tensor
-    test_tensor <- torch::torch_tensor(c(0.0), requires_grad = TRUE, dtype = torch::torch_float64())
+    # Test with a torch tensor matching the number of parameters
+    test_tensor <- torch::torch_tensor(
+      rep(0.0, n_params),
+      requires_grad = TRUE,
+      dtype = torch::torch_float64()
+    )
     is_torch <- is_torch_native(loglik, test_tensor, data)
   }
 
