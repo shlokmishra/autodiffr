@@ -71,3 +71,7 @@ src/*.dll
 # Proposal files
 proposal.tex
 R_proposal.pdf
+
+# Plot files (should not be in repo)
+Rplot.png
+*.png
