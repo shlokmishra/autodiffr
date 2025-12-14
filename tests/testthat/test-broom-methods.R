@@ -77,9 +77,13 @@ test_that("glance.autodiffr_fit works", {
   # Register broom methods
   library(broom)
   if (requireNamespace("generics", quietly = TRUE)) {
-    registerS3method("tidy", "autodiffr_fit", autodiffr::tidy.autodiffr_fit)
-    registerS3method("glance", "autodiffr_fit", autodiffr::glance.autodiffr_fit)
-    registerS3method("augment", "autodiffr_fit", autodiffr::augment.autodiffr_fit)
+    # Get methods from autodiffr namespace
+    tidy_method <- get("tidy.autodiffr_fit", envir = asNamespace("autodiffr"))
+    glance_method <- get("glance.autodiffr_fit", envir = asNamespace("autodiffr"))
+    augment_method <- get("augment.autodiffr_fit", envir = asNamespace("autodiffr"))
+    registerS3method("tidy", "autodiffr_fit", tidy_method)
+    registerS3method("glance", "autodiffr_fit", glance_method)
+    registerS3method("augment", "autodiffr_fit", augment_method)
   }
   
   set.seed(123)
@@ -118,9 +122,13 @@ test_that("glance.autodiffr_fit works for mest", {
   # Register broom methods
   library(broom)
   if (requireNamespace("generics", quietly = TRUE)) {
-    registerS3method("tidy", "autodiffr_fit", autodiffr::tidy.autodiffr_fit)
-    registerS3method("glance", "autodiffr_fit", autodiffr::glance.autodiffr_fit)
-    registerS3method("augment", "autodiffr_fit", autodiffr::augment.autodiffr_fit)
+    # Get methods from autodiffr namespace
+    tidy_method <- get("tidy.autodiffr_fit", envir = asNamespace("autodiffr"))
+    glance_method <- get("glance.autodiffr_fit", envir = asNamespace("autodiffr"))
+    augment_method <- get("augment.autodiffr_fit", envir = asNamespace("autodiffr"))
+    registerS3method("tidy", "autodiffr_fit", tidy_method)
+    registerS3method("glance", "autodiffr_fit", glance_method)
+    registerS3method("augment", "autodiffr_fit", augment_method)
   }
   
   set.seed(123)
@@ -155,9 +163,13 @@ test_that("augment.autodiffr_fit works", {
   # Register broom methods
   library(broom)
   if (requireNamespace("generics", quietly = TRUE)) {
-    registerS3method("tidy", "autodiffr_fit", autodiffr::tidy.autodiffr_fit)
-    registerS3method("glance", "autodiffr_fit", autodiffr::glance.autodiffr_fit)
-    registerS3method("augment", "autodiffr_fit", autodiffr::augment.autodiffr_fit)
+    # Get methods from autodiffr namespace
+    tidy_method <- get("tidy.autodiffr_fit", envir = asNamespace("autodiffr"))
+    glance_method <- get("glance.autodiffr_fit", envir = asNamespace("autodiffr"))
+    augment_method <- get("augment.autodiffr_fit", envir = asNamespace("autodiffr"))
+    registerS3method("tidy", "autodiffr_fit", tidy_method)
+    registerS3method("glance", "autodiffr_fit", glance_method)
+    registerS3method("augment", "autodiffr_fit", augment_method)
   }
   
   set.seed(123)
