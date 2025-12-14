@@ -140,9 +140,11 @@ test_that("validation functions work", {
     "start must be a named numeric vector"
   )
   
+  # numeric(0) fails name check first, so test with named empty vector
   expect_error(
-    optim_mle(function(x, y) 1, numeric(0), data = 1:10),
+    optim_mle(function(x, y) 1, structure(numeric(0), names = character(0)), data = 1:10),
     "start must have at least one parameter"
   )
 })
+
 
