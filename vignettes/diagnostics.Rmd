@@ -1,0 +1,308 @@
+---
+title: "Profile Likelihood and Diagnostics"
+author: "Shlok Mishra"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Profile Likelihood and Diagnostics}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5,
+  eval = requireNamespace("torch", quietly = TRUE) && 
+         requireNamespace("broom", quietly = TRUE) &&
+         requireNamespace("ggplot2", quietly = TRUE)
+)
+```
+
+## Introduction
+
+This vignette covers diagnostic tools in `autodiffr`:
+
+1. **Gradient checking**: Using `check_grad()` to verify autograd gradients
+2. **Variance-covariance diagnostics**: Using `vcov_info()` to diagnose estimation issues
+3. **Profile likelihood**: Computing profile likelihood confidence intervals (when available)
+4. **Visualization**: Using `autoplot()` for diagnostic plots
+
+## Part 1: Gradient Verification
+
+When writing custom log-likelihood functions, it's important to verify that gradients are computed correctly. The `check_grad()` function compares autograd gradients with finite-difference approximations.
+
+### Example: Normal Distribution
+
+```{r grad-check-setup}
+library(torch)
+library(autodiffr)
+library(ggplot2)
+
+set.seed(123)
+n <- 100
+data <- rnorm(n, mean = 5, sd = 2)
+data_tensor <- torch_tensor(data, dtype = torch_float64())
+```
+
+#### Torch-Native Log-Likelihood
+
+```{r loglik-gradcheck}
+loglik_normal <- function(theta, data) {
+  mu <- theta[1]
+  sigma <- torch_clamp(theta[2], min = 1e-6)
+  dist <- distr_normal(mu, sigma)
+  dist$log_prob(data)$sum()
+}
+```
+
+#### Check Gradients
+
+```{r check-grad}
+theta0 <- c(mu = 4.5, sigma = 1.8)
+
+grad_check <- check_grad(
+  loglik = loglik_normal,
+  theta0 = theta0,
+  data = data_tensor
+)
+
+print(grad_check)
+```
+
+The output shows:
+- Maximum absolute and relative errors
+- Whether gradients are OK (within tolerance)
+- Detailed comparison for each parameter
+
+#### Interpreting Results
+
+```{r grad-check-interpret}
+# Check if gradients are OK
+grad_check$ok
+
+# Maximum relative error
+grad_check$max_rel_err
+
+# Detailed comparison
+data.frame(
+  Parameter = names(grad_check$grad_autograd),
+  Autograd = grad_check$grad_autograd,
+  FiniteDiff = grad_check$grad_fd,
+  RelError = grad_check$rel_err
+)
+```
+
+If `ok = TRUE`, the autograd gradients match finite differences within tolerance, indicating the function is implemented correctly.
+
+### Common Issues
+
+#### Non-Differentiable Operations
+
+If your function uses non-differentiable operations, `check_grad()` will flag large discrepancies:
+
+```{r grad-check-broken}
+# Example of a problematic function (using abs without proper handling)
+loglik_broken <- function(theta, data) {
+  mu <- theta[1]
+  sigma <- abs(theta[2])  # abs() breaks autograd
+  dist <- distr_normal(mu, sigma)
+  dist$log_prob(data)$sum()
+}
+
+# This will show large errors
+grad_check_broken <- check_grad(
+  loglik = loglik_broken,
+  theta0 = theta0,
+  data = data_tensor
+)
+
+print(grad_check_broken)
+```
+
+## Part 2: Variance-Covariance Diagnostics
+
+The `vcov_info()` function provides diagnostics for the variance-covariance matrix, helping identify estimation problems.
+
+### Example: Well-Conditioned Case
+
+```{r vcov-info-setup}
+set.seed(789)
+n <- 200
+X <- cbind(1, rnorm(n))
+beta_true <- c(1, 2)
+y <- X %*% beta_true + rnorm(n, sd = 1)
+
+X_tensor <- torch_tensor(X, dtype = torch_float64())
+y_tensor <- torch_tensor(y, dtype = torch_float64())
+data_vcov <- list(X = X_tensor, y = y_tensor)
+
+loglik_linear <- function(theta, data) {
+  beta <- theta[1:2]
+  residuals <- data$y - torch_matmul(data$X, beta)
+  -0.5 * torch_sum(residuals^2)  # Log-likelihood (up to constants)
+}
+
+fit_vcov <- optim_mle(
+  loglik = loglik_linear,
+  start = c(beta0 = 0, beta1 = 0),
+  data = data_vcov
+)
+```
+
+#### Check Variance-Covariance Information
+
+```{r vcov-info-good}
+vcov_info_good <- vcov_info(fit_vcov, type = "observed")
+print(vcov_info_good)
+```
+
+Key diagnostics:
+- **Condition number**: Should be small (< 1e12) for well-conditioned matrices
+- **Eigenvalues**: Should all be positive for positive definite matrices
+- **Well-conditioned flag**: Indicates if the matrix is numerically stable
+
+### Example: Ill-Conditioned Case
+
+Sometimes the information matrix is ill-conditioned, indicating potential identification issues:
+
+```{r vcov-info-ill}
+# Create nearly collinear design matrix
+X_ill <- cbind(1, rnorm(n), rnorm(n) + 0.99 * rnorm(n))  # Nearly collinear
+X_ill_tensor <- torch_tensor(X_ill, dtype = torch_float64())
+data_ill <- list(X = X_ill_tensor, y = y_tensor)
+
+loglik_ill <- function(theta, data) {
+  beta <- theta[1:3]
+  residuals <- data$y - torch_matmul(data$X, beta)
+  -0.5 * torch_sum(residuals^2)
+}
+
+fit_ill <- optim_mle(
+  loglik = loglik_ill,
+  start = c(beta0 = 0, beta1 = 0, beta2 = 0),
+  data = data_ill
+)
+
+vcov_info_ill <- vcov_info(fit_ill, type = "observed")
+print(vcov_info_ill)
+```
+
+Notice the large condition number, indicating numerical instability.
+
+## Part 3: Profile Likelihood
+
+Profile likelihood provides confidence intervals that may be more accurate than Wald intervals, especially for small samples or when parameters are near boundaries.
+
+**Note:** The `profile_lik()` function is planned for future versions. Below is a conceptual example of how it would work.
+
+### Conceptual Example
+
+```{r profile-lik-conceptual, eval = FALSE}
+# This is a placeholder showing the intended API
+# profile_lik() will be implemented in a future version
+
+# Profile likelihood for mu parameter
+# profile_mu <- profile_lik(
+#   fit = fit_vcov,
+#   parameter = "beta0",
+#   range = c(-2, 4),
+#   n_points = 50
+# )
+# 
+# # Plot profile likelihood
+# autoplot(profile_mu)
+# 
+# # Get confidence intervals
+# confint(profile_mu, level = 0.95)
+```
+
+For now, you can compute profile likelihood manually by fixing one parameter and optimizing over the others.
+
+## Part 4: Visualization
+
+The `autoplot()` function provides diagnostic plots for fitted models.
+
+### Parameter Estimates Plot
+
+```{r autoplot}
+# Plot parameter estimates with confidence intervals
+p <- autoplot(fit_vcov)
+print(p)
+```
+
+### Customizing Plots
+
+```{r autoplot-custom}
+# The plot can be customized like any ggplot
+library(ggplot2)
+
+p + 
+  labs(title = "Linear Regression Parameter Estimates",
+       subtitle = "With 95% Confidence Intervals") +
+  theme_minimal()
+```
+
+## Part 5: Complete Diagnostic Workflow
+
+Here's a recommended workflow for model diagnostics:
+
+```{r diagnostic-workflow}
+# 1. Check gradients (before fitting)
+grad_check <- check_grad(
+  loglik = loglik_linear,
+  theta0 = c(beta0 = 0, beta1 = 0),
+  data = data_vcov
+)
+
+if (!grad_check$ok) {
+  warning("Gradient check failed! Review your log-likelihood function.")
+}
+
+# 2. Fit the model
+fit <- optim_mle(
+  loglik = loglik_linear,
+  start = c(beta0 = 0, beta1 = 0),
+  data = data_vcov
+)
+
+# 3. Check convergence
+if (fit$convergence != 0) {
+  warning("Optimization did not converge: ", fit$message)
+}
+
+# 4. Check variance-covariance matrix
+vcov_diag <- vcov_info(fit, type = "observed")
+
+if (vcov_diag$cond_number > 1e12) {
+  warning("Information matrix is ill-conditioned. ",
+          "Consider checking for collinearity or identification issues.")
+}
+
+if (any(vcov_diag$eigenvalues <= 0)) {
+  warning("Information matrix has non-positive eigenvalues. ",
+          "This may indicate a non-convex likelihood.")
+}
+
+# 5. Visualize results
+autoplot(fit)
+
+# 6. Get tidy output
+library(broom)
+tidy(fit)
+glance(fit)
+```
+
+## Summary
+
+This vignette demonstrated:
+
+1. **Gradient checking**: Using `check_grad()` to verify autograd implementation
+2. **Variance diagnostics**: Using `vcov_info()` to detect numerical issues
+3. **Visualization**: Using `autoplot()` for diagnostic plots
+4. **Diagnostic workflow**: A complete workflow for model validation
+
+These tools help ensure your models are correctly specified and numerically stable, leading to reliable inference.
+

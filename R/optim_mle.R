@@ -518,6 +518,7 @@ optim_mle <- function(loglik,
     gradient = final_grad,
     optimizer = optimizer,
     vcov = vcov_matrix,
+    method = "mle",
     call = call
   )
 }

@@ -1,0 +1,265 @@
+---
+title: "Constraints and M-Estimation"
+author: "Shlok Mishra"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Constraints and M-Estimation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5,
+  eval = requireNamespace("torch", quietly = TRUE) && 
+         requireNamespace("broom", quietly = TRUE)
+)
+```
+
+## Introduction
+
+This vignette demonstrates two important features of `autodiffr`:
+
+1. **Parameter constraints**: Using `positive()` and other constraint helpers to ensure parameters satisfy bounds (e.g., variance parameters must be positive)
+2. **M-estimation**: Using `optim_mest()` for robust estimation with sandwich variance-covariance matrices
+
+## Part 1: Parameter Constraints
+
+### Why Constraints?
+
+Many statistical models have parameters that must satisfy constraints:
+- Variance parameters must be positive: $\sigma^2 > 0$
+- Rate parameters must be positive: $\lambda > 0$
+- Probabilities must be in [0, 1]
+- Correlation matrices must be positive definite
+
+`autodiffr` handles constraints smoothly by transforming parameters to an unconstrained space for optimization, then transforming back.
+
+### Example: Normal Distribution with Positive Variance
+
+Let's estimate the mean and variance of a normal distribution, ensuring the variance is positive:
+
+```{r constraint-setup}
+library(torch)
+library(autodiffr)
+library(broom)
+
+set.seed(123)
+n <- 100
+true_mu <- 5
+true_sigma <- 2
+data <- rnorm(n, mean = true_mu, sd = true_sigma)
+data_tensor <- torch_tensor(data, dtype = torch_float64())
+```
+
+#### Without Constraints (may fail if optimizer tries negative variance)
+
+```{r no-constraint}
+loglik_normal <- function(theta, data) {
+  mu <- theta[1]
+  sigma <- torch_clamp(theta[2], min = 1e-6)  # Manual clamping
+  dist <- distr_normal(mu, sigma)
+  dist$log_prob(data)$sum()
+}
+
+start <- c(mu = 0, sigma = 1)
+fit_no_constraint <- optim_mle(
+  loglik = loglik_normal,
+  start = start,
+  data = data_tensor
+)
+```
+
+#### With Constraints (recommended)
+
+```{r with-constraint}
+# Apply positive constraint to sigma
+constraint_sigma <- positive("sigma")
+
+loglik_normal_constrained <- function(theta, data) {
+  mu <- theta[1]
+  sigma <- theta[2]  # No need for manual clamping!
+  dist <- distr_normal(mu, sigma)
+  dist$log_prob(data)$sum()
+}
+
+fit_constrained <- optim_mle(
+  loglik = loglik_normal_constrained,
+  start = start,
+  data = data_tensor,
+  constraints = constraint_sigma
+)
+
+print(fit_constrained)
+```
+
+Notice that `sigma` is automatically constrained to be positive, and the optimization is done in unconstrained space.
+
+### Example: Exponential Distribution
+
+For an exponential distribution with rate parameter $\lambda > 0$:
+
+```{r exponential}
+set.seed(789)
+n <- 50
+true_lambda <- 2
+data_exp <- rexp(n, rate = true_lambda)
+data_exp_tensor <- torch_tensor(data_exp, dtype = torch_float64())
+
+loglik_exp <- function(theta, data) {
+  lambda <- theta[1]
+  dist <- distr_exponential(lambda)
+  dist$log_prob(data)$sum()
+}
+
+# Constrain lambda to be positive
+constraint_lambda <- positive("lambda")
+
+fit_exp <- optim_mle(
+  loglik = loglik_exp,
+  start = c(lambda = 1),
+  data = data_exp_tensor,
+  constraints = constraint_lambda
+)
+
+print(fit_exp)
+tidy(fit_exp)
+```
+
+## Part 2: M-Estimation
+
+M-estimation is a generalization of maximum likelihood that solves estimating equations. It's particularly useful for robust statistics.
+
+### Example: Robust Linear Regression
+
+Standard OLS minimizes $\sum (y_i - X_i' \beta)^2$. A robust alternative uses Huber's loss or other robust loss functions. We can implement this via M-estimation.
+
+```{r mest-setup}
+set.seed(456)
+n <- 100
+X <- cbind(1, rnorm(n))  # Design matrix with intercept
+beta_true <- c(2, 3)
+y <- X %*% beta_true + rnorm(n, sd = 1)
+
+# Add some outliers
+outlier_idx <- sample(n, 5)
+y[outlier_idx] <- y[outlier_idx] + 10 * rnorm(5)
+
+data_mest <- list(X = X, y = y)
+```
+
+### Defining Estimating Equations
+
+For OLS, the estimating equations are:
+$$\sum_i (y_i - X_i' \beta) X_i = 0$$
+
+```{r psi-ols}
+# Estimating equations for OLS
+psi_ols <- function(theta, data) {
+  beta <- theta[c("beta0", "beta1")]
+  residuals <- data$y - data$X %*% as.numeric(beta)
+  # Return n x p matrix: each row is psi_i
+  cbind(residuals * data$X[, 1], residuals * data$X[, 2])
+}
+```
+
+### Fitting with optim_mest()
+
+```{r fit-mest}
+start_mest <- c(beta0 = 0, beta1 = 0)
+
+fit_mest <- optim_mest(
+  psi = psi_ols,
+  theta0 = start_mest,
+  data = data_mest,
+  method = "adam",
+  control = list(max_iter = 500)
+)
+
+print(fit_mest)
+```
+
+### Comparing with OLS
+
+```{r compare-ols}
+# Standard OLS
+ols_fit <- lm(y ~ X[, 2])
+
+# M-estimation results
+coef(fit_mest)
+coef(ols_fit)
+
+# Standard errors (sandwich for M-estimation)
+sqrt(diag(vcov(fit_mest)))
+sqrt(diag(vcov(ols_fit)))
+```
+
+### Variance-Covariance Information
+
+```{r vcov-info}
+# Get detailed vcov information
+vcov_info_mest <- vcov_info(fit_mest, type = "observed")
+print(vcov_info_mest)
+
+# Check condition number
+vcov_info_mest$cond_number
+```
+
+### Robust M-Estimator with Huber Loss
+
+For a truly robust estimator, we can use Huber's loss:
+
+```{r huber-psi}
+# Huber's psi function
+huber_psi <- function(r, c = 1.345) {
+  ifelse(abs(r) <= c, r, c * sign(r))
+}
+
+# Robust estimating equations
+psi_huber <- function(theta, data, c = 1.345) {
+  beta <- theta[c("beta0", "beta1")]
+  residuals <- data$y - data$X %*% as.numeric(beta)
+  psi_residuals <- huber_psi(residuals, c = c)
+  cbind(psi_residuals * data$X[, 1], psi_residuals * data$X[, 2])
+}
+
+fit_huber <- optim_mest(
+  psi = psi_huber,
+  theta0 = start_mest,
+  data = data_mest,
+  method = "adam",
+  control = list(max_iter = 500)
+)
+
+print(fit_huber)
+```
+
+### Sandwich Variance
+
+M-estimation provides sandwich variance-covariance matrices that are robust to model misspecification:
+
+```{r sandwich-vcov}
+# Sandwich variance (automatically computed)
+vcov_sandwich <- vcov(fit_mest)
+print(vcov_sandwich)
+
+# Compare with OLS variance
+vcov_ols <- vcov(ols_fit)
+print(vcov_ols)
+```
+
+## Summary
+
+This vignette demonstrated:
+
+1. **Parameter constraints**: Using `positive()` to ensure parameters satisfy bounds
+2. **M-estimation**: Using `optim_mest()` to solve estimating equations
+3. **Sandwich variance**: Robust variance-covariance estimation
+4. **Variance diagnostics**: Using `vcov_info()` to check matrix properties
+
+Constraints are handled automatically through smooth transformations, and M-estimation provides a flexible framework for robust statistics beyond maximum likelihood.
+

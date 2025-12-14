@@ -7,6 +7,7 @@ new_autodiffr_fit <- function(coefficients = numeric(0),
                                gradient = numeric(0),
                                optimizer = character(0),
                                vcov = NULL,
+                               method = "mle",
                                call = NULL) {
   structure(
     list(
@@ -19,6 +20,7 @@ new_autodiffr_fit <- function(coefficients = numeric(0),
       gradient = gradient,
       optimizer = optimizer,
       vcov = vcov,
+      method = method,
       call = call
     ),
     class = "autodiffr_fit"
@@ -34,6 +36,7 @@ autodiffr_fit <- function(coefficients,
                           gradient,
                           optimizer,
                           vcov = NULL,
+                          method = "mle",
                           call = NULL) {
   new_autodiffr_fit(
     coefficients = coefficients,
@@ -45,6 +48,7 @@ autodiffr_fit <- function(coefficients,
     gradient = gradient,
     optimizer = optimizer,
     vcov = vcov,
+    method = method,
     call = call
   )
 }
