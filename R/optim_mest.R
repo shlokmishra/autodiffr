@@ -496,7 +496,7 @@ optim_mest <- function(psi,
     }
     
     # Compute B (meat): sample covariance of psi_i
-    B_matrix <- cov(psi_mat_soln_r)
+      B_matrix <- stats::cov(psi_mat_soln_r)
     
     # Compute A (bread): Jacobian of psi_mean w.r.t. theta
     # A[i,j] = d(psi_mean[j]) / d(theta[i])

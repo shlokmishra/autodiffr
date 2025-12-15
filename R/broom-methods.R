@@ -38,8 +38,8 @@ tidy.autodiffr_fit <- function(x, ...) {
          "Install it with: install.packages('tibble')")
   }
   
-  est <- coef(x)
-  vcov_mat <- vcov(x)
+  est <- stats::coef(x)
+  vcov_mat <- stats::vcov(x)
   
   # Compute standard errors
   if (!is.null(vcov_mat)) {

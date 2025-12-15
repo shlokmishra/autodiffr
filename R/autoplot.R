@@ -37,8 +37,8 @@ autoplot.autodiffr_fit <- function(object, type = c("summary"), ...) {
     # Create a simple summary plot
     # For now, just show coefficients with confidence intervals if vcov is available
     
-    vcov_mat <- vcov(object)
-    coefs <- coef(object)
+    vcov_mat <- stats::vcov(object)
+    coefs <- stats::coef(object)
     
     if (length(coefs) == 0) {
       warning("No coefficients to plot.")
