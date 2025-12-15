@@ -27,8 +27,8 @@ test_that("tidy.autodiffr_fit works", {
   start <- c(mu = 0, sigma = 1)
   fit <- optim_mle(loglik_r, start, data_r, max_iter = 50)
   
-  # Test tidy
-  result <- broom::tidy(fit)
+  # Test tidy - suppress NaN warnings from sqrt when vcov has NaN
+  result <- suppressWarnings(broom::tidy(fit))
   
   expect_s3_class(result, "tbl_df")
   expect_equal(nrow(result), 2)

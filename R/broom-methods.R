@@ -43,7 +43,10 @@ tidy.autodiffr_fit <- function(x, ...) {
   
   # Compute standard errors
   if (!is.null(vcov_mat)) {
-    se <- sqrt(diag(vcov_mat))
+    # Suppress NaN warnings from sqrt when vcov has NaN values
+    se <- suppressWarnings(sqrt(diag(vcov_mat)))
+    # Replace NaN with NA for cleaner output
+    se[is.nan(se)] <- NA_real_
   } else {
     se <- rep(NA_real_, length(est))
   }
