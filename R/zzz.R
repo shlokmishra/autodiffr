@@ -3,14 +3,26 @@
 register_broom_methods <- function(pkgname = "autodiffr") {
   if (requireNamespace("generics", quietly = TRUE)) {
     tryCatch({
-      registerS3method("tidy", "autodiffr_fit", tidy.autodiffr_fit, 
-                       envir = asNamespace(pkgname))
-      registerS3method("glance", "autodiffr_fit", glance.autodiffr_fit, 
-                       envir = asNamespace(pkgname))
-      registerS3method("augment", "autodiffr_fit", augment.autodiffr_fit, 
-                       envir = asNamespace(pkgname))
+      # Get methods from namespace - they must exist
+      # Use inherits = TRUE to allow finding them even if not fully loaded
+      if (exists("tidy.autodiffr_fit", envir = asNamespace(pkgname), inherits = TRUE)) {
+        tidy_method <- get("tidy.autodiffr_fit", envir = asNamespace(pkgname), inherits = TRUE)
+        registerS3method("tidy", "autodiffr_fit", tidy_method, 
+                         envir = asNamespace(pkgname))
+      }
+      if (exists("glance.autodiffr_fit", envir = asNamespace(pkgname), inherits = TRUE)) {
+        glance_method <- get("glance.autodiffr_fit", envir = asNamespace(pkgname), inherits = TRUE)
+        registerS3method("glance", "autodiffr_fit", glance_method, 
+                         envir = asNamespace(pkgname))
+      }
+      if (exists("augment.autodiffr_fit", envir = asNamespace(pkgname), inherits = TRUE)) {
+        augment_method <- get("augment.autodiffr_fit", envir = asNamespace(pkgname), inherits = TRUE)
+        registerS3method("augment", "autodiffr_fit", augment_method, 
+                         envir = asNamespace(pkgname))
+      }
     }, error = function(e) {
-      # Registration failed, that's okay
+      # Registration failed, that's okay - methods may not be available yet
+      # This is non-fatal
     })
   }
 }
@@ -21,17 +33,18 @@ register_broom_methods <- function(pkgname = "autodiffr") {
   if (isNamespaceLoaded("ggplot2")) {
     tryCatch({
       if (exists("autoplot", envir = asNamespace("ggplot2"))) {
-        registerS3method("autoplot", "autodiffr_fit", autoplot.autodiffr_fit, 
-                         envir = asNamespace(pkgname))
+        if (exists("autoplot.autodiffr_fit", envir = asNamespace(pkgname), inherits = TRUE)) {
+          autoplot_method <- get("autoplot.autodiffr_fit", envir = asNamespace(pkgname), inherits = TRUE)
+          registerS3method("autoplot", "autodiffr_fit", autoplot_method, 
+                           envir = asNamespace(pkgname))
+        }
       }
     }, error = function(e) {
       # Registration failed, that's okay
     })
   }
   
-  # Register broom methods if generics is available
-  register_broom_methods(pkgname)
-  
+  # Don't register broom methods during .onLoad - do it lazily in .onAttach
   # Set hook to register when broom/generics is attached
   setHook(packageEvent("generics", "onLoad"), function(...) {
     register_broom_methods(pkgname)
@@ -46,15 +59,18 @@ register_broom_methods <- function(pkgname = "autodiffr") {
   if (isNamespaceLoaded("ggplot2")) {
     tryCatch({
       if (exists("autoplot", envir = asNamespace("ggplot2"))) {
-        registerS3method("autoplot", "autodiffr_fit", autoplot.autodiffr_fit, 
-                         envir = asNamespace(pkgname))
+        if (exists("autoplot.autodiffr_fit", envir = asNamespace(pkgname), inherits = TRUE)) {
+          autoplot_method <- get("autoplot.autodiffr_fit", envir = asNamespace(pkgname), inherits = TRUE)
+          registerS3method("autoplot", "autodiffr_fit", autoplot_method, 
+                           envir = asNamespace(pkgname))
+        }
       }
     }, error = function(e) {
       # Registration failed, that's okay
     })
   }
   
-  # Register broom methods if they're available
+  # Register broom methods if they're available (now namespace is fully loaded)
   register_broom_methods(pkgname)
 }
 
