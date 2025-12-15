@@ -66,3 +66,7 @@ R_proposal.pdf
 # Plot files (should not be in repo)
 Rplot.png
 *.png
+
+# Assessment files (should not be in repo)
+RUBRIC_ASSESSMENT.md
+*ASSESSMENT*.md
