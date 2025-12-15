@@ -148,8 +148,11 @@ test_that("glance.autodiffr_fit works for mest", {
   }
   
   start <- c(beta0 = 0, beta1 = 0)
-  fit <- optim_mest(psi_ols, start, data_list, method = "adam",
-                    control = list(max_iter = 100))
+  # Suppress expected warnings about sandwich variance computation
+  fit <- suppressWarnings(
+    optim_mest(psi_ols, start, data_list, method = "adam",
+               control = list(max_iter = 100))
+  )
   
   result <- broom::glance(fit)
   
