@@ -500,26 +500,13 @@ optim_mest <- function(psi,
     
     # Compute A (bread): Jacobian of psi_mean w.r.t. theta
     # A[i,j] = d(psi_mean[j]) / d(theta[i])
-    if (is_torch) {
-      # Use autograd to compute Jacobian
-      # Ensure theta_final_torch has gradient tracking
-      if (!is.null(constraints)) {
-        theta_final_torch <- torch::torch_tensor(as.numeric(final_params),
-                                                  requires_grad = TRUE,
-                                                  dtype = torch::torch_float64())
-        constraint_result <- apply_constraints(theta_final_torch, constraints, param_names)
-        theta_final_torch <- constraint_result$theta
-      } else {
-        theta_final_torch <- torch::torch_tensor(as.numeric(final_params),
-                                                  requires_grad = TRUE,
-                                                  dtype = torch::torch_float64())
-      }
-      
-      # Compute Jacobian: d(psi_mean) / d(theta)
-      # A[i,j] = d(psi_mean[j]) / d(theta[i])
-      # We'll compute this by backpropagating each element of psi_mean separately
-      A_list <- list()
-      for (j in seq_len(n_params)) {
+    # Use finite differences for both torch and R functions - more reliable
+    # than trying to extract columns from torch tensors which can fail
+    A_list <- list()
+    eps <- 1e-5
+    psi_mean_base <- colMeans(psi_mat_soln_r)
+    
+    for (j in seq_len(n_params)) {
         # Recompute psi with fresh gradient tracking for each column
         # Need to ensure we're working with the constrained parameters
         if (!is.null(constraints)) {
