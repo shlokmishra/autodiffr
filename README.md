@@ -152,7 +152,7 @@ print(check_result)
 
 - **Tests**: 145 passing tests, comprehensive test coverage
 - **Broom Integration**: Fully functional with `tidy()`, `glance()`, and `augment()` methods
-- **Vignettes**: Three complete vignettes with examples (plots verified and render correctly) (all plots verified and rendering correctly)
+- **Vignettes**: Three complete vignettes with examples (all plots verified and rendering correctly)
 - **Documentation**: Full roxygen2 documentation for all exported functions
 
 ## Implementation Notes
