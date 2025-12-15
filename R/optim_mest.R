@@ -522,7 +522,16 @@ optim_mest <- function(psi,
       }
       
       # Compute psi at perturbed theta
-      psi_mat_plus <- do.call(psi, c(list(theta_plus_constrained, data), dots))
+      # Convert to torch tensor if psi is torch-native
+      if (is_torch) {
+        theta_plus_torch <- torch::torch_tensor(as.numeric(theta_plus_constrained),
+                                                requires_grad = FALSE,
+                                                dtype = torch::torch_float64())
+        psi_mat_plus <- do.call(psi, c(list(theta_plus_torch, data), dots))
+      } else {
+        psi_mat_plus <- do.call(psi, c(list(theta_plus_constrained, data), dots))
+      }
+      
       if (inherits(psi_mat_plus, "torch_tensor")) {
         psi_mat_plus_r <- as.matrix(psi_mat_plus$detach()$cpu())
       } else {
