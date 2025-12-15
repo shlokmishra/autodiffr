@@ -537,39 +537,106 @@ optim_mest <- function(psi,
         psi_mat_grad <- do.call(psi, c(list(theta_final_torch, data), dots))
         # Extract j-th column and compute mean
         # Handle both torch tensors and R matrices
+        # Always convert to R first for reliability, then compute mean
         if (inherits(psi_mat_grad, "torch_tensor")) {
-          if (length(psi_mat_grad$shape) == 2) {
-            # 2D tensor: extract column j (1-based indexing)
-            tryCatch({
-              psi_col_j <- psi_mat_grad[, j]
+          # Convert to R matrix first
+          psi_mat_grad_r <- as.matrix(psi_mat_grad$detach()$cpu())
+          # Check dimensions
+          if (ncol(psi_mat_grad_r) < j || j < 1) {
+            # Invalid column index, skip this iteration
+            A_list[[j]] <- rep(0, n_params)
+            next
+          }
+          # Compute mean in R, then convert to torch tensor for autograd
+          psi_mean_value <- mean(psi_mat_grad_r[, j])
+          psi_mean_j <- torch::torch_tensor(psi_mean_value, 
+                                            dtype = torch::torch_float64(),
+                                            requires_grad = FALSE)
+          # We need to recompute with gradient tracking
+          # Create a new computation that tracks gradients
+          psi_mat_grad2 <- do.call(psi, c(list(theta_final_torch, data), dots))
+          if (inherits(psi_mat_grad2, "torch_tensor")) {
+            psi_mat_grad2_r <- as.matrix(psi_mat_grad2$detach()$cpu())
+            if (ncol(psi_mat_grad2_r) >= j && j >= 1) {
+              # Use torch operations on the tensor directly
+              # Extract column using proper indexing
+              psi_col_j <- psi_mat_grad2[, j, drop = FALSE]
               psi_mean_j <- torch::torch_mean(psi_col_j)
-            }, error = function(e) {
-              # Fallback: convert to R and compute
-              psi_mat_grad_r <- as.matrix(psi_mat_grad$detach()$cpu())
-              psi_mean_j <<- torch::torch_tensor(mean(psi_mat_grad_r[, j]), 
-                                                dtype = torch::torch_float64())
-            })
+            } else {
+              # Fallback: use R computation
+              psi_mean_j <- torch::torch_tensor(psi_mean_value, 
+                                                dtype = torch::torch_float64(),
+                                                requires_grad = FALSE)
+            }
           } else {
-            # Not 2D, convert to R
-            psi_mat_grad_r <- as.matrix(psi_mat_grad$detach()$cpu())
-            psi_mean_j <- torch::torch_tensor(mean(psi_mat_grad_r[, j]), 
-                                              dtype = torch::torch_float64())
+            psi_mean_j <- torch::torch_tensor(psi_mean_value, 
+                                              dtype = torch::torch_float64(),
+                                              requires_grad = FALSE)
           }
         } else {
-          # R matrix, convert to torch
+          # R matrix
           psi_mat_grad_r <- as.matrix(psi_mat_grad)
-          psi_mean_j <- torch::torch_tensor(mean(psi_mat_grad_r[, j]), 
-                                            dtype = torch::torch_float64())
+          if (ncol(psi_mat_grad_r) < j || j < 1) {
+            A_list[[j]] <- rep(0, n_params)
+            next
+          }
+          psi_mean_value <- mean(psi_mat_grad_r[, j])
+          psi_mean_j <- torch::torch_tensor(psi_mean_value, 
+                                            dtype = torch::torch_float64(),
+                                            requires_grad = FALSE)
         }
         
         # Compute gradient of psi_mean_j w.r.t. theta_final_torch
-        grad_j <- torch::autograd_grad(
-          outputs = psi_mean_j,
-          inputs = theta_final_torch,
-          retain_graph = FALSE,
-          create_graph = FALSE
-        )[[1]]
-        A_list[[j]] <- as.numeric(grad_j$detach()$cpu())
+        # Only if psi_mean_j requires gradients
+        if (psi_mean_j$requires_grad || inherits(psi_mean_j, "torch_tensor")) {
+          tryCatch({
+            grad_j <- torch::autograd_grad(
+              outputs = psi_mean_j,
+              inputs = theta_final_torch,
+              retain_graph = (j < n_params),  # Retain graph for all but last
+              create_graph = FALSE
+            )[[1]]
+            A_list[[j]] <- as.numeric(grad_j$detach()$cpu())
+          }, error = function(e) {
+            # If autograd fails, use finite differences for this column
+            eps <- 1e-5
+            theta_plus <- final_params
+            theta_plus[j] <- theta_plus[j] + eps
+            if (!is.null(constraints)) {
+              constraint_result_plus <- apply_constraints_r(theta_plus, constraints, param_names)
+              theta_plus_constrained <- constraint_result_plus$theta
+            } else {
+              theta_plus_constrained <- theta_plus
+            }
+            psi_mat_plus <- do.call(psi, c(list(theta_plus_constrained, data), dots))
+            psi_mat_plus_r <- as.matrix(psi_mat_plus)
+            if (inherits(psi_mat_plus, "torch_tensor")) {
+              psi_mat_plus_r <- as.matrix(psi_mat_plus$detach()$cpu())
+            }
+            psi_mean_plus <- colMeans(psi_mat_plus_r)
+            psi_mean_base <- colMeans(psi_mat_soln_r)
+            A_list[[j]] <<- (psi_mean_plus - psi_mean_base) / eps
+          })
+        } else {
+          # Fallback to finite differences
+          eps <- 1e-5
+          theta_plus <- final_params
+          theta_plus[j] <- theta_plus[j] + eps
+          if (!is.null(constraints)) {
+            constraint_result_plus <- apply_constraints_r(theta_plus, constraints, param_names)
+            theta_plus_constrained <- constraint_result_plus$theta
+          } else {
+            theta_plus_constrained <- theta_plus
+          }
+          psi_mat_plus <- do.call(psi, c(list(theta_plus_constrained, data), dots))
+          psi_mat_plus_r <- as.matrix(psi_mat_plus)
+          if (inherits(psi_mat_plus, "torch_tensor")) {
+            psi_mat_plus_r <- as.matrix(psi_mat_plus$detach()$cpu())
+          }
+          psi_mean_plus <- colMeans(psi_mat_plus_r)
+          psi_mean_base <- colMeans(psi_mat_soln_r)
+          A_list[[j]] <- (psi_mean_plus - psi_mean_base) / eps
+        }
       }
       A_matrix <- do.call(rbind, A_list)  # p x p matrix
     } else {
