@@ -190,8 +190,8 @@ test_that("augment.autodiffr_fit works", {
   start <- c(mu = 0, sigma = 1)
   fit <- optim_mle(loglik_r, start, data_r, max_iter = 50)
   
-  # Test augment without data
-  result1 <- broom::augment(fit)
+  # Test augment without data - suppress expected warning
+  result1 <- suppressWarnings(broom::augment(fit))
   
   expect_s3_class(result1, "tbl_df")
   expect_equal(nrow(result1), 1)
