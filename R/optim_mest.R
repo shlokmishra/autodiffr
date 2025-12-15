@@ -533,22 +533,7 @@ optim_mest <- function(psi,
       # Jacobian column: d(psi_mean) / d(theta[j])
       A_list[[j]] <- (psi_mean_plus - psi_mean_base) / eps
     }
-    A_matrix <- do.call(rbind, A_list)  # p x p matrix else {
-      # Use finite differences for Jacobian
-      eps <- 1e-5
-      A_list <- list()
-      psi_mean_base <- colMeans(psi_mat_soln_r)
-      
-      for (i in seq_len(n_params)) {
-        theta_plus <- final_params
-        theta_plus[i] <- theta_plus[i] + eps
-        psi_mat_plus <- do.call(psi, c(list(theta_plus, data), dots))
-        psi_mat_plus <- as.matrix(psi_mat_plus)
-        psi_mean_plus <- colMeans(psi_mat_plus)
-        A_list[[i]] <- (psi_mean_plus - psi_mean_base) / eps
-      }
-      A_matrix <- do.call(rbind, A_list)  # p x p matrix
-    }
+    A_matrix <- do.call(rbind, A_list)  # p x p matrix
     
     # Compute sandwich variance: J_inv %*% S %*% t(J_inv) / n
     # where J = A (bread) and S = B (meat)
