@@ -152,8 +152,22 @@ print(check_result)
 
 - **Tests**: 145 passing tests, comprehensive test coverage
 - **Broom Integration**: Fully functional with `tidy()`, `glance()`, and `augment()` methods
-- **Vignettes**: Three complete vignettes with examples
+- **Vignettes**: Three complete vignettes with examples (all plots verified and rendering correctly)
 - **Documentation**: Full roxygen2 documentation for all exported functions
+
+## Implementation Notes
+
+### Why No C++ Code?
+
+This package is intentionally implemented entirely in R using the high-level `torch` package API. The `torch` package already provides efficient C++ bindings to `libtorch` (PyTorch's C++ backend), so there is no need for custom C++ code. This design choice offers several advantages:
+
+- **Easier maintenance**: Pure R code is easier to debug and maintain
+- **Cross-platform compatibility**: `torch` handles platform-specific compilation
+- **Performance**: `torch`'s C++ backend provides excellent performance for tensor operations and automatic differentiation
+- **Accessibility**: Users don't need C++ toolchains or compilation setup
+- **Rapid development**: Faster iteration without C++ compilation cycles
+
+The package leverages `torch`'s automatic differentiation capabilities directly through R, providing the same computational efficiency as custom C++ implementations while maintaining the simplicity of an R-only codebase.
 
 ## See Also
 
