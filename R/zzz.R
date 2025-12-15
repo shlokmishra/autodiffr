@@ -29,8 +29,15 @@ register_broom_methods <- function(pkgname = "autodiffr") {
 
 # Register S3 methods for optional dependencies when package loads
 .onLoad <- function(libname, pkgname) {
-  # Register autoplot method if ggplot2 is available
-  if (isNamespaceLoaded("ggplot2")) {
+  # Don't try to register methods during .onLoad - namespace may not be fully loaded
+  # Set hooks to register when packages are attached
+  setHook(packageEvent("generics", "onLoad"), function(...) {
+    register_broom_methods(pkgname)
+  })
+  setHook(packageEvent("broom", "onLoad"), function(...) {
+    register_broom_methods(pkgname)
+  })
+  setHook(packageEvent("ggplot2", "onLoad"), function(...) {
     tryCatch({
       if (exists("autoplot", envir = asNamespace("ggplot2"))) {
         if (exists("autoplot.autodiffr_fit", envir = asNamespace(pkgname), inherits = TRUE)) {
@@ -42,15 +49,6 @@ register_broom_methods <- function(pkgname = "autodiffr") {
     }, error = function(e) {
       # Registration failed, that's okay
     })
-  }
-  
-  # Don't register broom methods during .onLoad - do it lazily in .onAttach
-  # Set hook to register when broom/generics is attached
-  setHook(packageEvent("generics", "onLoad"), function(...) {
-    register_broom_methods(pkgname)
-  })
-  setHook(packageEvent("broom", "onLoad"), function(...) {
-    register_broom_methods(pkgname)
   })
 }
 

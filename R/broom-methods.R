@@ -19,7 +19,7 @@
 #' `broom` is not attached, as it uses S3 method dispatch.
 #'
 #' @method tidy autodiffr_fit
-#' @export
+#' @noRd
 #'
 #' @examples
 #' \dontrun{
@@ -90,7 +90,7 @@ tidy.autodiffr_fit <- function(x, ...) {
 #' observations (nobs) is not currently stored in fit objects and will be NA.
 #'
 #' @method glance autodiffr_fit
-#' @export
+#' @noRd
 #'
 #' @examples
 #' \dontrun{
@@ -154,7 +154,7 @@ glance.autodiffr_fit <- function(x, ...) {
 #' on what kind of model you're fitting.
 #'
 #' @method augment autodiffr_fit
-#' @export
+#' @noRd
 #'
 #' @examples
 #' \dontrun{
