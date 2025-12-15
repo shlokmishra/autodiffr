@@ -196,9 +196,9 @@ test_that("augment.autodiffr_fit works", {
   expect_true(all(is.na(result1$.fitted)))
   expect_true(all(is.na(result1$.resid)))
   
-  # Test augment with data
+  # Test augment with data - suppress expected warnings
   data_df <- data.frame(y = data_r)
-  result2 <- broom::augment(fit, data = data_df)
+  result2 <- suppressWarnings(broom::augment(fit, data = data_df))
   
   expect_s3_class(result2, "tbl_df")
   expect_equal(nrow(result2), 100)
